@@ -19,4 +19,35 @@ func (p Ping) Bytes() []byte {
 type Pong struct {
 	Message string `json:"message"`
 	From    string `json:"from"`
+	Key     string `json:"key"`
+}
+
+type Pos struct {
+	Lat float64 `json:lat`
+	Lng float64 `json:lng`
+	Id  string  `json:id`
+}
+
+func (p *Pos) Bytes() []byte {
+	data, _ := json2.Marshal(p)
+	return data
+}
+
+type RangeQuery struct {
+	Lat      float64 `json:lat`
+	Lng      float64 `json:lng`
+	Distance float64 `json:distance`
+}
+
+type CellQuery struct {
+	CellId string `json:cellid`
+}
+
+func (p *CellQuery) Bytes() []byte {
+	data, _ := json2.Marshal(p)
+	return data
+}
+
+type QueryResult struct {
+	Points []*Pos `json:points`
 }

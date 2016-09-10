@@ -22,46 +22,73 @@ package main
 
 import (
 	"flag"
+	_ "fmt"
+	"os"
+	_ "time"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/uber-common/bark"
 	"github.com/uber/ringpop-go"
 	"github.com/uber/ringpop-go/discovery/jsonfile"
+	"github.com/uber/ringpop-go/logging"
 	"github.com/uber/ringpop-go/swim"
 	"github.com/uber/tchannel-go"
 )
 
 var (
 	hostport = flag.String("listen", "127.0.0.1:3000", "hostport to start ringpop on")
+	httpport = flag.String("http", "127.0.0.1:8000", "hostport to start ringpop on")
 	hostfile = flag.String("hosts", "./hosts.json", "path to hosts file")
 )
+
+func init() {
+	// Log as JSON instead of the default ASCII formatter.
+	//log.SetFormatter(&log.JSONFormatter{})
+
+	// Output to stderr instead of stdout, could also be a file.
+	log.SetOutput(os.Stderr)
+
+	// Only log the warning severity or above.
+	log.SetLevel(log.WarnLevel)
+}
 
 func main() {
 	flag.Parse()
 
-	ch, err := tchannel.NewChannel("ping", nil)
+	logger := log.StandardLogger()
+
+	l := bark.NewLoggerFromLogrus(logger)
+
+	ch, err := tchannel.NewChannel("geo", &tchannel.ChannelOptions{
+		Logger: LbsLogger{l},
+	})
 	if err != nil {
 		log.Fatalf("channel did not create successfully: %v", err)
 	}
 
-	logger := log.StandardLogger()
+	logOpts := ringpop.LogLevels(map[string]logging.Level{
+		"damping":       logging.Debug,
+		"dissemination": logging.Debug,
+		"gossip":        logging.Debug,
+		"join":          logging.Debug,
+		"membership":    logging.Debug,
+		"ring":          logging.Debug,
+		"suspicion":     logging.Debug,
+	})
 
-	rp, err := ringpop.New("ping-app",
+	rp, err := ringpop.New("geo-app",
 		ringpop.Channel(ch),
 		ringpop.Identity(*hostport),
-		ringpop.Logger(bark.NewLoggerFromLogrus(logger)),
+		ringpop.Logger(l),
+		logOpts,
 	)
 	if err != nil {
 		log.Fatalf("Unable to create Ringpop: %v", err)
 	}
 
-	worker := &worker{
-		channel: ch,
-		ringpop: rp,
-		logger:  logger,
-	}
+	worker := NewWorker(rp, ch, logger, *httpport)
 
-	if err := worker.RegisterPong(); err != nil {
+	if err := worker.Register(); err != nil {
 		log.Fatalf("could not register pong handler: %v", err)
 	}
 
@@ -75,6 +102,9 @@ func main() {
 	if _, err := worker.ringpop.Bootstrap(opts); err != nil {
 		log.Fatalf("ringpop bootstrap failed: %v", err)
 	}
+
+	httpServer := NewHttpServer(*httpport, worker)
+	httpServer.Serv()
 
 	select {}
 }

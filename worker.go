@@ -1,46 +1,108 @@
 package main
 
 import (
+	"errors"
+
 	log "github.com/Sirupsen/logrus"
+	"github.com/liuzz1983/scalelbs/geoindex"
 	"github.com/uber/ringpop-go"
 	"github.com/uber/tchannel-go"
 
-	json2 "encoding/json"
-	"github.com/uber/tchannel-go/json"
-	"golang.org/x/net/context"
+	"encoding/json"
 )
 
-type worker struct {
-	ringpop *ringpop.Ringpop
-	channel *tchannel.Channel
-	logger  *log.Logger
+type Worker struct {
+	ringpop  *ringpop.Ringpop
+	channel  *tchannel.Channel
+	logger   *log.Logger
+	httpHost string
+
+	geoIndexer *GeoIndexer
 }
 
-func (w *worker) RegisterPong() error {
-	hmap := map[string]interface{}{"/ping": w.PingHandler}
-
-	return json.Register(w.channel, hmap, func(ctx context.Context, err error) {
-		w.logger.Debug("error occured: %v", err)
-	})
+func NewWorker(ringpop *ringpop.Ringpop, channel *tchannel.Channel, logger *log.Logger, httpHost string) *Worker {
+	return &Worker{
+		ringpop:    ringpop,
+		channel:    channel,
+		logger:     logger,
+		httpHost:   httpHost,
+		geoIndexer: NewGeoIndexer(geoindex.Km(2.0)),
+	}
 }
 
-func (w *worker) PingHandler(ctx json.Context, ping *Ping) (*Pong, error) {
-	var pong Pong
-	var res []byte
+func (w *Worker) Ping(ping *Ping) (*Pong, error) {
 
-	handle, err := w.ringpop.HandleOrForward(ping.Key, ping.Bytes(), &res, "ping", "/ping", tchannel.JSON, nil)
-	if handle {
-		identity, err := w.ringpop.WhoAmI()
-		if err != nil {
-			return nil, err
-		}
-		return &Pong{"Hello, world!", identity}, nil
+	if !w.ringpop.Ready() {
+		w.logger.Errorf("rong is not ready")
+		return nil, errors.New("worker not ready")
 	}
 
-	if err := json2.Unmarshal(res, &pong); err != nil {
+	dest, err := w.ringpop.Lookup(ping.Key)
+	if err != nil {
+		w.logger.Errorf("can not find dest for %v with error %v", ping.Key, err)
 		return nil, err
 	}
 
+	res, err := w.ringpop.Forward(dest, []string{ping.Key}, ping.Bytes(), ServiceName, PingPath, tchannel.JSON, nil)
+	if err != nil {
+		w.logger.Errorf("can not forward to dest for error %v", err)
+		return nil, err
+	}
+
+	var pong Pong
+	if err := json.Unmarshal(res, &pong); err != nil {
+		w.logger.Errorf("error in unmarshal result %v", err)
+		return nil, err
+	}
 	// else request was forwarded
 	return &pong, err
+
+}
+func (w *Worker) Add(pos *Pos) error {
+
+	cell := w.geoIndexer.Cell(pos.Lat, pos.Lng)
+	key := cell.Id()
+
+	dest, err := w.ringpop.Lookup(key)
+	if err != nil {
+		w.logger.Errorf("can not find dest %v for key %v", dest, key)
+		return errors.New("cant not find dest")
+	}
+	_, err = w.ringpop.Forward(dest, []string{key}, pos.Bytes(), ServiceName, AddPath, tchannel.JSON, nil)
+	return err
+}
+
+func (w *Worker) Search(lat float64, lng float64) (*QueryResult, error) {
+
+	cells := w.geoIndexer.Cells(lat, lng)
+	r := &QueryResult{
+		Points: make([]*Pos, 0),
+	}
+
+	for _, cell := range cells {
+
+		dest, err := w.ringpop.Lookup(cell.Id())
+		if err != nil {
+			w.logger.Errorf("error in query id:%v with error", cell.Id(), err)
+			continue
+		}
+		query := CellQuery{
+			CellId: cell.Id(),
+		}
+
+		res, err := w.ringpop.Forward(dest, []string{cell.Id()}, query.Bytes(), "geo", "/geo_query", tchannel.JSON, nil)
+		if err != nil {
+			continue
+		}
+		result := QueryResult{}
+		if err := json.Unmarshal(res, &result); err != nil {
+			w.logger.Errorf("error in unmarshal result %v", err)
+			continue
+		}
+		if result.Points != nil {
+			r.Points = append(r.Points, result.Points...)
+		}
+	}
+
+	return r, nil
 }
