@@ -20,17 +20,17 @@ func (w *Worker) Register() error {
 
 func (w *Worker) AddHandler(ctx json.Context, pos *Pos) (map[string]interface{}, error) {
 
-	cell := w.geoIndexer.PosCell(pos)
+	cell := w.geoIndexer.Cell(pos.Lat, pos.Lng)
 	key := cell.Id()
 	var res []byte
 
 	handle, err := w.ringpop.HandleOrForward(key, pos.Bytes(), &res, ServiceName, AddPath, tchannel.JSON, nil)
 	if handle {
-		w.logger.WithField("pos", pos).Error(" begin to add point")
+		w.logger.WithField("pos", pos).Debug(" begin to add point")
 		if err != nil {
 			return nil, err
 		}
-		w.geoIndexer.AddPos(pos)
+		w.geoIndexer.Add(pos)
 		return nil, nil
 	}
 
@@ -68,7 +68,11 @@ func (w *Worker) PingHandler(ctx json.Context, ping *Ping) (*Pong, error) {
 		if err != nil {
 			return nil, err
 		}
-		return &Pong{"Hello, world!", identity, ping.Key}, nil
+		return &Pong{
+			Message: "Hello, world!",
+			From:    identity,
+			Key:     ping.Key,
+		}, nil
 	}
 	return nil, err
 }

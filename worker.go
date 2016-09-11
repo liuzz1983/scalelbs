@@ -4,7 +4,6 @@ import (
 	"errors"
 
 	log "github.com/Sirupsen/logrus"
-	"github.com/liuzz1983/scalelbs/geoindex"
 	"github.com/uber/ringpop-go"
 	"github.com/uber/tchannel-go"
 
@@ -26,7 +25,7 @@ func NewWorker(ringpop *ringpop.Ringpop, channel *tchannel.Channel, logger *log.
 		channel:    channel,
 		logger:     logger,
 		httpHost:   httpHost,
-		geoIndexer: NewGeoIndexer(geoindex.Km(2.0)),
+		geoIndexer: NewGeoIndexer(Km(2.0)),
 	}
 }
 

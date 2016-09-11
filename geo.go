@@ -1,57 +1,93 @@
 package main
 
 import (
-	"github.com/liuzz1983/scalelbs/geoindex"
+	"sync"
+	"time"
 )
 
-type GeoIndexer struct {
-	resolution geoindex.Meters
-	indexes    map[string]map[string]*Pos
+type IndexEntry struct {
+	entries map[string]*Pos
+	lastInserted  map[string]time.Time
+	sync.RWMutex
 }
 
-func NewGeoIndexer(resolution geoindex.Meters) *GeoIndexer {
+func NewIndexEntry() *IndexEntry {
+	return  &IndexEntry{
+		entries: make(map[string]*Pos),
+		lastInserted: make(map[string]time.Time),
+	}
+}
+
+
+func (entry *IndexEntry) Add(pos *Pos) {
+	entry.Lock()
+	defer entry.Unlock()
+
+	entry.lastInserted[pos.Id] = getNow()
+	entry.entries[pos.Id] = pos
+}
+
+func (entry *IndexEntry) Remove(id string) {
+	entry.Lock()
+	defer entry.Unlock()
+	delete(entry.entries, id)
+}
+
+func (entry *IndexEntry) Entries() []*Pos {
+	entry.RLock()
+	defer entry.RUnlock()
+
+	points := make([]*Pos, 0, len(entry.entries))
+	for _, v := range entry.entries {
+		points = append(points, v)
+	}
+	return points
+}
+
+type GeoIndexer struct {
+	resolution Meters
+	indexes    map[string]*IndexEntry
+	sync.RWMutex
+}
+
+func NewGeoIndexer(resolution Meters) *GeoIndexer {
 	return &GeoIndexer{
-		indexes:    make(map[string]map[string]*Pos),
+		indexes:    make(map[string]*IndexEntry),
 		resolution: resolution,
 	}
 }
 
-func (indexer *GeoIndexer) Cells(lat float64, lng float64) []geoindex.Cell {
-	cell := geoindex.CellOf2(lat, lng, indexer.resolution)
-	cells := make([]geoindex.Cell, 0)
-	indexes := []int{0, 1, 2}
-	for _, x := range indexes {
-		for _, y := range indexes {
-			cells = append(cells, geoindex.Cell{
-				X: cell.X - 1 + x,
-				Y: cell.Y - 1 + y,
-			})
-		}
-	}
+func (indexer *GeoIndexer) Cells(lat float64, lng float64) []Cell {
+	cells := CellsOf(lat, lng, indexer.resolution)
 	return cells
 }
 
-func (indexer *GeoIndexer) Cell(lat float64, lng float64) geoindex.Cell {
-	return geoindex.CellOf2(lat, lng, indexer.resolution)
+func (indexer *GeoIndexer) Cell(lat float64, lng float64) Cell {
+	return CellOf2(lat, lng, indexer.resolution)
 }
 
-func (indexer *GeoIndexer) PosCell(pos *Pos) geoindex.Cell {
-	return geoindex.CellOf2(pos.Lat, pos.Lng, indexer.resolution)
-}
+func (indexer *GeoIndexer) Add(pos *Pos) {
 
-func (indexer *GeoIndexer) AddPos(pos *Pos) {
-	cell := indexer.PosCell(pos)
-	values, ok := indexer.indexes[cell.Id()]
+	cell := indexer.Cell(pos.Lat, pos.Lng)
+	indexer.Lock()
+	defer indexer.Unlock()
+
+	entry, ok := indexer.indexes[cell.Id()]
 	if !ok {
-		values = make(map[string]*Pos, 0)
+		entry = NewIndexEntry()
 	}
-	values[cell.Id()] = pos
-	indexer.indexes[cell.Id()] = values
+	entry.Add(pos)
+	indexer.indexes[cell.Id()] = entry
 }
 
-func (indexer *GeoIndexer) Get(cellId string) map[string]*Pos {
-	v, _ := indexer.indexes[cellId]
-	return v
+func (indexer *GeoIndexer) Get(cellId string) []*Pos {
+	indexer.RLock()
+	v, ok := indexer.indexes[cellId]
+	indexer.RUnlock()
+	if !ok {
+		return nil
+	}
+	return v.Entries()
 }
 
 type GeoLevelIndexer struct {

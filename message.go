@@ -4,13 +4,19 @@ import (
 	json2 "encoding/json"
 )
 
+type ToBytes struct{}
+
+func (p *ToBytes) Bytes() []byte {
+	data, _ := json2.Marshal(p)
+	return data
+}
+
 // Ping is a request
 type Ping struct {
 	Key string `json:"key"`
 }
 
-// Bytes returns the byets for a ping
-func (p Ping) Bytes() []byte {
+func (p *Ping) Bytes() []byte {
 	data, _ := json2.Marshal(p)
 	return data
 }
@@ -20,6 +26,11 @@ type Pong struct {
 	Message string `json:"message"`
 	From    string `json:"from"`
 	Key     string `json:"key"`
+}
+
+func (p *Pong) Bytes() []byte {
+	data, _ := json2.Marshal(p)
+	return data
 }
 
 type Pos struct {
@@ -39,10 +50,14 @@ type RangeQuery struct {
 	Distance float64 `json:distance`
 }
 
+func (p *RangeQuery) Bytes() []byte {
+	data, _ := json2.Marshal(p)
+	return data
+}
+
 type CellQuery struct {
 	CellId string `json:cellid`
 }
-
 func (p *CellQuery) Bytes() []byte {
 	data, _ := json2.Marshal(p)
 	return data
@@ -50,4 +65,9 @@ func (p *CellQuery) Bytes() []byte {
 
 type QueryResult struct {
 	Points []*Pos `json:points`
+}
+
+func (p *QueryResult) Bytes() []byte {
+	data, _ := json2.Marshal(p)
+	return data
 }

@@ -1,4 +1,4 @@
-package geoindex
+package main
 
 import (
 	"fmt"

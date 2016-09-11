@@ -5,38 +5,38 @@ import (
 	"github.com/uber/tchannel-go"
 )
 
-type LbsLogger struct {
+type ProxyLogger struct {
 	Logger bark.Logger
 }
 
-func (l LbsLogger) Enabled(_ tchannel.LogLevel) bool { return false }
+func (l ProxyLogger) Enabled(_ tchannel.LogLevel) bool { return false }
 
-func (l LbsLogger) Fatal(msg string) {
+func (l ProxyLogger) Fatal(msg string) {
 	l.Logger.Fatal(msg)
 }
-func (l LbsLogger) Error(msg string) {
+func (l ProxyLogger) Error(msg string) {
 	l.Logger.Error(msg)
 }
-func (l LbsLogger) Warn(msg string) {
+func (l ProxyLogger) Warn(msg string) {
 	l.Logger.Warn(msg)
 }
-func (l LbsLogger) Infof(msg string, args ...interface{}) {
+func (l ProxyLogger) Infof(msg string, args ...interface{}) {
 	l.Logger.Infof(msg, args...)
 }
-func (l LbsLogger) Info(msg string) {
+func (l ProxyLogger) Info(msg string) {
 	l.Logger.Info(msg)
 }
-func (l LbsLogger) Debugf(msg string, args ...interface{}) {
+func (l ProxyLogger) Debugf(msg string, args ...interface{}) {
 	l.Logger.Debugf(msg, args...)
 }
-func (l LbsLogger) Debug(msg string) {
+func (l ProxyLogger) Debug(msg string) {
 	l.Logger.Debug(msg)
 }
-func (l LbsLogger) Fields() tchannel.LogFields {
+func (l ProxyLogger) Fields() tchannel.LogFields {
 	return nil
 }
 
-func (l LbsLogger) WithFields(fields ...tchannel.LogField) tchannel.Logger {
+func (l ProxyLogger) WithFields(fields ...tchannel.LogField) tchannel.Logger {
 	logFields := make(bark.Fields)
 	for _, field := range fields {
 		logFields[field.Key] = field.Value

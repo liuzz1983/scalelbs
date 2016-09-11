@@ -60,7 +60,7 @@ func main() {
 	l := bark.NewLoggerFromLogrus(logger)
 
 	ch, err := tchannel.NewChannel("geo", &tchannel.ChannelOptions{
-		Logger: LbsLogger{l},
+		Logger: ProxyLogger{l},
 	})
 	if err != nil {
 		log.Fatalf("channel did not create successfully: %v", err)
