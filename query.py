@@ -1,6 +1,12 @@
 import urllib 
 import urllib2 
 import json
+import time
+import geopy
+
+from geopy.distance import vincenty
+
+
 url = 'http://127.0.0.1:8000/search' 
 base_lat = 23.0
 base_lng = 45.0
@@ -13,10 +19,21 @@ for i in range(100):
 	values['lng'] = base_lng + i* 0.01
 	values['id'] = str(i)
 	
+	begin = time.time()
 	data = urllib.urlencode(values) 
 	req = urllib2.Request(url, data) 
 	response = urllib2.urlopen(req) 
 	the_page = response.read()
-	values = json.loads(the_page)
 
-	print len(values["Data"]["Points"])
+	cost1 = time.time() - begin
+	result = json.loads(the_page)
+	#
+
+	max_ = 0
+	for p in result["Data"]["points"]:
+
+		dis = vincenty((values[u'lat'],values[u'lng']),(p[u'lat'],p[u'lng']))
+		if dis > max_:
+			max_ = dis
+
+	print len(result["Data"]["points"]),max_, cost1, time.time()-begin

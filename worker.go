@@ -1,14 +1,21 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
+	"sync"
+	"time"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/uber/ringpop-go"
+	_ "github.com/uber/ringpop-go/replica"
 	"github.com/uber/tchannel-go"
-
-	"encoding/json"
 )
+
+type WorkerOptions struct {
+	CellMeters  float64
+	ExpiredTime time.Duration
+}
 
 type Worker struct {
 	ringpop  *ringpop.Ringpop
@@ -19,13 +26,32 @@ type Worker struct {
 	geoIndexer *GeoIndexer
 }
 
-func NewWorker(ringpop *ringpop.Ringpop, channel *tchannel.Channel, logger *log.Logger, httpHost string) *Worker {
+var DefaultOptions *WorkerOptions = &WorkerOptions{
+	CellMeters:  2.0,
+	ExpiredTime: time.Minute * 1,
+}
+
+func MergeOptions(options *WorkerOptions) *WorkerOptions {
+	result := *DefaultOptions
+	if options == nil {
+		return &result
+	}
+
+	result.CellMeters = options.CellMeters
+	result.ExpiredTime = options.ExpiredTime
+	return &result
+}
+
+func NewWorker(ringpop *ringpop.Ringpop, channel *tchannel.Channel, logger *log.Logger, httpHost string, options *WorkerOptions) *Worker {
+
+	values := MergeOptions(options)
+
 	return &Worker{
 		ringpop:    ringpop,
 		channel:    channel,
 		logger:     logger,
 		httpHost:   httpHost,
-		geoIndexer: NewGeoIndexer(Km(2.0)),
+		geoIndexer: NewGeoIndexer(Km(values.CellMeters),values.ExpiredTime),
 	}
 }
 
@@ -71,6 +97,25 @@ func (w *Worker) Add(pos *Pos) error {
 	return err
 }
 
+type Reponses struct {
+	successes []*QueryResult
+	errors    []error
+	sync.Mutex
+}
+
+func (res *Reponses) add(r *QueryResult, err error) {
+	res.Lock()
+	go res.Unlock()
+
+	if r != nil {
+		res.successes = append(res.successes, r)
+	}
+
+	if err != nil {
+		res.errors = append(res.errors, err)
+	}
+}
+
 func (w *Worker) Search(lat float64, lng float64) (*QueryResult, error) {
 
 	cells := w.geoIndexer.Cells(lat, lng)
@@ -78,28 +123,63 @@ func (w *Worker) Search(lat float64, lng float64) (*QueryResult, error) {
 		Points: make([]*Pos, 0),
 	}
 
+	//replicator := replica.NewReplicator(w.ringpop, w.tchannel.GetSubChannel(ServiceName), nil, nil)
+
+	var wg sync.WaitGroup
+
+	responses := &Reponses{}
+
 	for _, cell := range cells {
 
-		dest, err := w.ringpop.Lookup(cell.Id())
-		if err != nil {
-			w.logger.Errorf("error in query id:%v with error", cell.Id(), err)
-			continue
-		}
-		query := CellQuery{
-			CellId: cell.Id(),
-		}
+		wg.Add(1)
+		go func(c Cell) {
 
-		res, err := w.ringpop.Forward(dest, []string{cell.Id()}, query.Bytes(), "geo", "/geo_query", tchannel.JSON, nil)
+			defer wg.Done()
+
+			dest, err := w.ringpop.Lookup(c.Id())
+			if err != nil {
+				w.logger.Errorf("error in query id:%v with error", c.Id(), err)
+				responses.add(nil, err)
+				return
+			}
+
+			query := CellQuery{
+				CellId: c.Id(),
+			}
+
+			res, err := w.ringpop.Forward(dest, []string{c.Id()}, query.Bytes(), ServiceName, QueryPath, tchannel.JSON, nil)
+			if err != nil {
+				w.logger.Errorf("error in forward dest")
+				responses.add(nil, err)
+				return
+
+			}
+
+			result := &QueryResult{}
+			if err := json.Unmarshal(res, result); err != nil {
+				w.logger.Errorf("error in unmarshal result %v", err)
+				responses.add(nil, err)
+				return
+			}
+
+			responses.add(result, nil)
+
+		}(cell)
+	}
+
+	wg.Wait()
+
+	//TODO need to remove duplication
+	for _, res := range responses.successes {
+		if res.Points != nil {
+			r.Points = append(r.Points, res.Points...)
+		}
+	}
+
+	// TODO need return it to the
+	for _, err := range responses.errors {
 		if err != nil {
-			continue
-		}
-		result := QueryResult{}
-		if err := json.Unmarshal(res, &result); err != nil {
-			w.logger.Errorf("error in unmarshal result %v", err)
-			continue
-		}
-		if result.Points != nil {
-			r.Points = append(r.Points, result.Points...)
+			w.logger.Errorf("error in process request for error %v", err)
 		}
 	}
 

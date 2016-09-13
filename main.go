@@ -22,9 +22,8 @@ package main
 
 import (
 	"flag"
-	_ "fmt"
 	"os"
-	_ "time"
+	"time"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/uber-common/bark"
@@ -86,7 +85,12 @@ func main() {
 		log.Fatalf("Unable to create Ringpop: %v", err)
 	}
 
-	worker := NewWorker(rp, ch, logger, *httpport)
+	options := &WorkerOptions{
+		CellMeters:  2.0,
+		ExpiredTime: time.Minute * 1,
+	}
+
+	worker := NewWorker(rp, ch, logger, *httpport,options)
 
 	if err := worker.Register(); err != nil {
 		log.Fatalf("could not register pong handler: %v", err)

@@ -43,7 +43,7 @@ func (s *HttpServer) Serv() {
 	fmt.Println("begin to listen on " + s.host)
 	err := http.ListenAndServe(s.host, nil)
 	if err != nil {
-		//log.Fatalf("channel did not create successfully: %v", err)
+		fmt.Errorf("channel did not create successfully: %v", err)
 	}
 }
 

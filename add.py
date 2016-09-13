@@ -9,10 +9,10 @@ base_lng = 45.0
 
 values = {'lat' : 23.0, 'lng' :24.0, 'id' : 'liu' } 
 
-for i in range(10000):
+for i in range(50000):
 
-	values['lat'] = base_lat + random.randint(0,1000)*0.001
-	values['lng'] = base_lng + random.randint(0,1000)* 0.001
+	values['lat'] = base_lat + random.randint(0,100)*0.001
+	values['lng'] = base_lng + random.randint(0,100)* 0.001
 	values['id'] = str(i)
 	data = urllib.urlencode(values) 
 	req = urllib2.Request(url, data) 

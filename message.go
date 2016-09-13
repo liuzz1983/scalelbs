@@ -1,13 +1,13 @@
 package main
 
 import (
-	json2 "encoding/json"
+	json "encoding/json"
 )
 
 type ToBytes struct{}
 
 func (p *ToBytes) Bytes() []byte {
-	data, _ := json2.Marshal(p)
+	data, _ := json.Marshal(p)
 	return data
 }
 
@@ -17,7 +17,7 @@ type Ping struct {
 }
 
 func (p *Ping) Bytes() []byte {
-	data, _ := json2.Marshal(p)
+	data, _ := json.Marshal(p)
 	return data
 }
 
@@ -29,45 +29,46 @@ type Pong struct {
 }
 
 func (p *Pong) Bytes() []byte {
-	data, _ := json2.Marshal(p)
+	data, _ := json.Marshal(p)
 	return data
 }
 
 type Pos struct {
-	Lat float64 `json:lat`
-	Lng float64 `json:lng`
-	Id  string  `json:id`
+	Lat float64 `json:"lat"`
+	Lng float64 `json:"lng"`
+	Id  string  `json:"id"`
 }
 
 func (p *Pos) Bytes() []byte {
-	data, _ := json2.Marshal(p)
+	data, _ := json.Marshal(p)
 	return data
 }
 
 type RangeQuery struct {
-	Lat      float64 `json:lat`
-	Lng      float64 `json:lng`
-	Distance float64 `json:distance`
+	Lat      float64 `json:"lat"`
+	Lng      float64 `json:"lng"`
+	Distance float64 `json:"distance"`
 }
 
 func (p *RangeQuery) Bytes() []byte {
-	data, _ := json2.Marshal(p)
+	data, _ := json.Marshal(p)
 	return data
 }
 
 type CellQuery struct {
-	CellId string `json:cellid`
+	CellId string `json:"cellid"`
 }
+
 func (p *CellQuery) Bytes() []byte {
-	data, _ := json2.Marshal(p)
+	data, _ := json.Marshal(p)
 	return data
 }
 
 type QueryResult struct {
-	Points []*Pos `json:points`
+	Points []*Pos `json:"points"`
 }
 
 func (p *QueryResult) Bytes() []byte {
-	data, _ := json2.Marshal(p)
+	data, _ := json.Marshal(p)
 	return data
 }
